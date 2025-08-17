@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VroomLot — Car Sales</title>
+  <meta name="description" content="A fast, vibrant static car sales site built for Azure Static Web Apps. TailwindCSS + Alpine.js + HTMX + Fuse.js + PWA." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Cpath fill='%2300AEEF' d='M10 78c0-18 14-36 32-40l30-7c16-4 30 5 36 20l6 16v28c0 6-4 10-10 10h-9a10 10 0 0 1-10-10V88H40v7a10 10 0 0 1-10 10h-8c-6 0-12-6-12-12z'/%3E%3Ccircle cx='98' cy='88' r='10' fill='%23fff'/%3E%3Ccircle cx='34' cy='95' r='10' fill='%23fff'/%3E%3C/svg%3E" />
+
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { theme: { extend: { boxShadow: { soft: '0 10px 30px rgba(0,0,0,.08)' }, colors: { brand: { 50:'#ecfeff',100:'#cffafe',200:'#a5f3fc',300:'#67e8f9',400:'#22d3ee',500:'#06b6d4',600:'#0891b2',700:'#0e7490',800:'#155e75',900:'#164e63' }}}}};</script>
+
+  <!-- Alpine.js for lightweight reactivity -->
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- HTMX for progressive enhancement (sorting, deep-linking) -->
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <!-- Fuse.js for fuzzy search -->
+  <script src="https://unpkg.com/fuse.js@7.0.0"></script>
+
+  <!-- PWA basics -->
+  <meta name="theme-color" content="#06b6d4" />
+  <link rel="manifest" href="data:application/manifest+json,{ }"> <!-- dummy so browsers don't error when prefetching -->
+  <style>
+    /* Hide spin buttons for number inputs */
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+  </style>
+</head>
+<body class="h-full bg-slate-50 text-slate-800">
+  <!-- App Shell -->
+  <div x-data="carApp()" x-init="init()" class="min-h-screen flex flex-col">
+    <!-- Topbar -->
+    <header class="sticky top-0 z-40 backdrop-blur bg-white/80 border-b border-slate-200">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center gap-4">
+        <div class="flex items-center gap-3">
+          <span class="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-brand-500 text-white shadow-soft">🚗</span>
+          <div>
+            <h1 class="text-xl font-semibold tracking-tight">VroomLot</h1>
+            <p class="text-xs text-slate-500 -mt-0.5">Static • Fast • Azure-ready</p>
+          </div>
+        </div>
+        <div class="ml-auto flex items-center gap-2">
+          <!-- Install PWA -->
+          <button x-show="canInstall" @click="installPWA" class="hidden sm:inline-flex px-3 py-2 rounded-xl bg-brand-600 text-white text-sm shadow-soft hover:bg-brand-700">Install App</button>
+
+          <!-- Theme toggle -->
+          <button @click="toggleTheme" class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm hover:bg-slate-200">Toggle Theme</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Controls -->
+    <section class="border-b border-slate-200 bg-white">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+          <!-- Search -->
+          <div class="md:col-span-2">
+            <label class="text-xs font-medium text-slate-600">Search (make, model, features)</label>
+            <input x-model.debounce.250ms="query" type="search" placeholder="e.g., Honda, sunroof, AWD" class="mt-1 w-full rounded-2xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+          </div>
+
+          <!-- Price Range -->
+          <div>
+            <label class="text-xs font-medium text-slate-600">Max Price (₹)</label>
+            <input x-model.number="filters.maxPrice" type="number" min="0" step="10000" placeholder="15,00,000" class="mt-1 w-full rounded-2xl border border-slate-300 px-3 py-2" />
+          </div>
+
+          <!-- Sort -->
+          <div>
+            <label class="text-xs font-medium text-slate-600">Sort By</label>
+            <select x-model="sortBy" class="mt-1 w-full rounded-2xl border border-slate-300 px-3 py-2">
+              <option value="relevance">Relevance</option>
+              <option value="priceAsc">Price: Low to High</option>
+              <option value="priceDesc">Price: High to Low</option>
+              <option value="yearDesc">Year: New to Old</option>
+              <option value="yearAsc">Year: Old to New</option>
+              <option value="mileageAsc">Mileage: Low to High</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-3 grid grid-cols-2 md:grid-cols-6 gap-3">
+          <!-- Make Filter -->
+          <div class="col-span-1 md:col-span-2">
+            <label class="text-xs font-medium text-slate-600">Make</label>
+            <select x-model="filters.make" class="mt-1 w-full rounded-2xl border border-slate-300 px-3 py-2">
+              <option value="">Any</option>
+              <template x-for="m in makes" :key="m"><option :value="m" x-text="m"></option></template>
+            </select>
+          </div>
+          <!-- Year From / To -->
+          <div>
+            <label class="text-xs font-medium text-slate-600">Year From</label>
+            <input x-model.number="filters.yearFrom" type="number" placeholder="2018" class="mt-1 w-full rounded-2xl border border-slate-300 px-3 py-2" />
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-600">Year To</label>
+            <input x-model.number="filters.yearTo" type="number" placeholder="2025" class="mt-1 w-full rounded-2xl border border-slate-300 px-3 py-2" />
+          </div>
+          <!-- Fuel Type -->
+          <div>
+            <label class="text-xs font-medium text-slate-600">Fuel</label>
+            <select x-model="filters.fuel" class="mt-1 w-full rounded-2xl border border-slate-300 px-3 py-2">
+              <option value="">Any</option>
+              <option>Petrol</option>
+              <option>Diesel</option>
+              <option>Hybrid</option>
+              <option>Electric</option>
+            </select>
+          </div>
+          <!-- Transmission -->
+          <div>
+            <label class="text-xs font-medium text-slate-600">Transmission</label>
+            <select x-model="filters.transmission" class="mt-1 w-full rounded-2xl border border-slate-300 px-3 py-2">
+              <option value="">Any</option>
+              <option>Manual</option>
+              <option>Automatic</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-3 flex items-center gap-2">
+          <button @click="resetFilters" class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200">Reset</button>
+          <span class="text-sm text-slate-500" x-text="`${filtered.length} cars`"></span>
+          <div class="ml-auto flex items-center gap-2">
+            <button @click="view='grid'" :class="view==='grid' ? 'bg-brand-600 text-white' : 'bg-slate-100'" class="px-3 py-2 rounded-xl">Grid</button>
+            <button @click="view='list'" :class="view==='list' ? 'bg-brand-600 text-white' : 'bg-slate-100'" class="px-3 py-2 rounded-xl">List</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Content -->
+    <main class="flex-1">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <!-- Compare bar -->
+        <div x-show="compare.length" class="mb-4 p-3 bg-white rounded-2xl border border-slate-200 shadow-soft">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-sm font-medium">Compare:</span>
+            <template x-for="id in compare" :key="id">
+              <span class="px-2 py-1 text-sm rounded-lg bg-slate-100" x-text="carById(id).title"></span>
+            </template>
+            <button @click="openCompare()" class="ml-auto px-3 py-2 rounded-xl bg-brand-600 text-white text-sm">Open Comparison</button>
+            <button @click="compare=[]" class="px-3 py-2 rounded-xl bg-slate-100 text-sm">Clear</button>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div x-show="view==='grid'" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <template x-for="car in paged" :key="car.id">
+            <article class="bg-white rounded-2xl border border-slate-200 shadow-soft overflow-hidden flex flex-col">
+              <div class="relative">
+                <img :src="car.image" :alt="car.title" class="w-full h-44 object-cover" loading="lazy" />
+                <button @click="toggleFavorite(car.id)" class="absolute top-3 right-3 w-9 h-9 rounded-xl bg-white/90 backdrop-blur flex items-center justify-center shadow-soft">
+                  <span x-text="favorites.includes(car.id) ? '💙' : '🤍'"></span>
+                </button>
+                <span class="absolute bottom-3 left-3 text-xs px-2 py-1 rounded-lg bg-black/70 text-white" x-text="car.badge"></span>
+              </div>
+              <div class="p-4 flex-1 flex flex-col">
+                <h3 class="text-lg font-semibold" x-text="car.title"></h3>
+                <p class="text-sm text-slate-500 mt-0.5" x-text="`${car.year} • ${car.fuel} • ${car.transmission}`"></p>
+                <ul class="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                  <template x-for="f in car.features.slice(0,4)"><li class="px-2 py-1 bg-slate-100 rounded-lg" x-text="f"></li></template>
+                </ul>
+                <div class="mt-auto pt-4 flex items-center justify-between">
+                  <div>
+                    <div class="text-xl font-bold" x-text="formatINR(car.price)"></div>
+                    <div class="text-xs text-slate-500" x-text="`${car.mileage.toLocaleString()} km`"></div>
+                  </div>
+                  <div class="flex gap-2">
+                    <button @click="addToCompare(car.id)" class="px-3 py-2 rounded-xl bg-slate-100 text-sm">Compare</button>
+                    <button @click="openDetails(car)" class="px-3 py-2 rounded-xl bg-brand-600 text-white text-sm">Details</button>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </template>
+        </div>
+
+        <div x-show="view==='list'" class="divide-y divide-slate-200 bg-white rounded-2xl border border-slate-200 shadow-soft">
+          <template x-for="car in paged" :key="car.id">
+            <div class="flex flex-col sm:flex-row gap-4 p-4 items-center">
+              <img :src="car.image" :alt="car.title" class="w-full sm:w-56 h-36 object-cover rounded-xl" loading="lazy" />
+              <div class="flex-1 w-full">
+                <div class="flex items-start gap-2">
+                  <h3 class="text-lg font-semibold" x-text="car.title"></h3>
+                  <span class="text-xs px-2 py-1 rounded-lg bg-slate-100" x-text="car.badge"></span>
+                  <button @click="toggleFavorite(car.id)" class="ml-auto px-2 py-1 rounded-lg bg-slate-100">Fav</button>
+                </div>
+                <p class="text-sm text-slate-500" x-text="`${car.year} • ${car.fuel} • ${car.transmission} • ${car.mileage.toLocaleString()} km`"></p>
+                <ul class="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                  <template x-for="f in car.features"><li class="px-2 py-1 bg-slate-100 rounded-lg" x-text="f"></li></template>
+                </ul>
+              </div>
+              <div class="text-right">
+                <div class="text-xl font-bold" x-text="formatINR(car.price)"></div>
+                <button @click="openDetails(car)" class="mt-2 px-3 py-2 rounded-xl bg-brand-600 text-white text-sm">View</button>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Pagination -->
+        <div class="mt-6 flex items-center justify-center gap-2" x-show="totalPages>1">
+          <button class="px-3 py-2 rounded-xl bg-slate-100" :disabled="page===1" @click="page--; scrollTop()">Prev</button>
+          <span class="text-sm">Page <span x-text="page"></span> / <span x-text="totalPages"></span></span>
+          <button class="px-3 py-2 rounded-xl bg-slate-100" :disabled="page===totalPages" @click="page++; scrollTop()">Next</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-auto border-t border-slate-200 bg-white">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-sm text-slate-600 flex flex-col sm:flex-row gap-2 sm:gap-6">
+        <p>© <span x-text="new Date().getFullYear()"></span> VroomLot. Static site ready for Azure Static Web Apps.</p>
+        <p class="sm:ml-auto">Built with TailwindCSS • Alpine.js • HTMX • Fuse.js • PWA</p>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Details Dialog -->
+  <div x-data="{ open:false, car:null }" x-show="open" x-cloak @open-details.window="car=$event.detail; open=true" class="fixed inset-0 z-50">
+    <div class="absolute inset-0 bg-black/40" @click="open=false"></div>
+    <div class="relative max-w-4xl mx-auto mt-10 bg-white rounded-2xl shadow-soft overflow-hidden">
+      <div class="grid md:grid-cols-2">
+        <img :src="car?.image" :alt="car?.title" class="w-full h-64 md:h-full object-cover" />
+        <div class="p-5">
+          <div class="flex items-start gap-2">
+            <h3 class="text-xl font-semibold" x-text="car?.title"></h3>
+            <span class="text-xs px-2 py-1 rounded-lg bg-slate-100" x-text="car?.badge"></span>
+            <button class="ml-auto px-2 py-1 rounded-lg bg-slate-100" @click="$dispatch('add-compare', car.id)">Compare</button>
+          </div>
+          <p class="text-sm text-slate-500" x-text="`${car?.year} • ${car?.fuel} • ${car?.transmission}`"></p>
+          <div class="mt-3 text-2xl font-bold" x-text="formatINR(car?.price||0)"></div>
+          <ul class="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+            <template x-for="f in car?.features"><li class="px-2 py-1 bg-slate-100 rounded-lg" x-text="f"></li></template>
+          </ul>
+          <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+            <div><span class="text-slate-500">Mileage:</span> <span x-text="car?.mileage.toLocaleString()+' km'"></span></div>
+            <div><span class="text-slate-500">Owner:</span> <span x-text="car?.owner"></span></div>
+            <div><span class="text-slate-500">Color:</span> <span x-text="car?.color"></span></div>
+            <div><span class="text-slate-500">Location:</span> <span x-text="car?.location"></span></div>
+          </div>
+          <div class="mt-5 flex gap-2">
+            <a :href="`tel:${car?.contact.phone}`" class="px-4 py-2 rounded-xl bg-brand-600 text-white">Call</a>
+            <a :href="`mailto:${car?.contact.email}?subject=${encodeURIComponent('Enquiry: '+car?.title)}`" class="px-4 py-2 rounded-xl bg-slate-100">Email</a>
+            <button @click="navigator.share && navigator.share({title:car?.title, text:'Check this car on VroomLot', url:location.href})" class="px-4 py-2 rounded-xl bg-slate-100">Share</button>
+            <button class="ml-auto px-4 py-2 rounded-xl bg-slate-100" @click="open=false">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compare Sheet -->
+  <div x-data="{ open:false, items:[] }" @open-compare.window="items=$event.detail; open=true" x-show="open" x-cloak class="fixed inset-0 z-50">
+    <div class="absolute inset-0 bg-black/40" @click="open=false"></div>
+    <div class="relative max-w-6xl mx-auto mt-10 bg-white rounded-2xl shadow-soft overflow-hidden p-4">
+      <h3 class="text-xl font-semibold">Compare Cars</h3>
+      <div class="mt-3 grid md:grid-cols-3 gap-4">
+        <template x-for="c in items" :key="c.id">
+          <div class="border border-slate-200 rounded-2xl overflow-hidden">
+            <img :src="c.image" :alt="c.title" class="w-full h-40 object-cover" />
+            <div class="p-3">
+              <div class="font-semibold" x-text="c.title"></div>
+              <div class="text-sm text-slate-500" x-text="`${c.year} • ${c.fuel} • ${c.transmission}`"></div>
+              <div class="mt-2 text-lg font-bold" x-text="formatINR(c.price)"></div>
+              <ul class="mt-2 text-sm space-y-1">
+                <li><span class="text-slate-500">Mileage:</span> <span x-text="c.mileage.toLocaleString()+' km'"></span></li>
+                <li><span class="text-slate-500">Owner:</span> <span x-text="c.owner"></span></li>
+                <li><span class="text-slate-500">Color:</span> <span x-text="c.color"></span></li>
+                <li><span class="text-slate-500">Location:</span> <span x-text="c.location"></span></li>
+              </ul>
+            </div>
+          </div>
+        </template>
+      </div>
+      <div class="mt-4 text-right">
+        <button class="px-4 py-2 rounded-xl bg-slate-100" @click="open=false">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Data (you can replace with your own or load from /cars.json) ---
+    const SAMPLE_CARS = [
+      { id: 1, title: 'Honda City ZX', make: 'Honda', model: 'City', year: 2022, fuel: 'Petrol', transmission: 'Automatic', mileage: 14000, price: 1450000, color: 'White', location: 'Bengaluru', owner: 'First', image: 'https://images.unsplash.com/photo-1594070319944-7c0cbebb6f58?q=80&w=1100&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D', features: ['Sunroof','LED Headlamps','Cruise Control','Apple CarPlay'], badge:'Certified', contact: { phone:'+919999999999', email:'sales@vroomlot.example' } },
+      { id: 2, title: 'Hyundai Creta SX(O)', make: 'Hyundai', model: 'Creta', year: 2021, fuel: 'Diesel', transmission: 'Manual', mileage: 28000, price: 1690000, color: 'Black', location: 'Mumbai', owner: 'Second', image: 'https://images.unsplash.com/photo-1619767886558-efdc259cde1a?q=80&w=1600&auto=format&fit=crop', features: ['Panoramic Roof','Ventilated Seats','6 Airbags','Android Auto'], badge:'Hot', contact: { phone:'+919888888888', email:'contact@vroomlot.example' } },
+      { id: 3, title: 'Maruti Baleno Alpha', make: 'Maruti', model: 'Baleno', year: 2020, fuel: 'Petrol', transmission: 'Manual', mileage: 35000, price: 880000, color: 'Blue', location: 'Pune', owner: 'First', image: 'https://images.unsplash.com/photo-1542362567-b07e54358753?q=80&w=1600&auto=format&fit=crop', features: ['Projector Lamps','Alloy Wheels','Rear Camera'], badge:'Value', contact: { phone:'+919777777777', email:'hello@vroomlot.example' } },
+      { id: 4, title: 'Tata Nexon EV Max', make: 'Tata', model: 'Nexon EV', year: 2023, fuel: 'Electric', transmission: 'Automatic', mileage: 9000, price: 1790000, color: 'Teal', location: 'Hyderabad', owner: 'First', image: 'https://images.unsplash.com/photo-1619767885738-877a5ed7c1b2?q=80&w=1600&auto=format&fit=crop', features: ['Fast Charge','Connected Car','ESC','Hill Hold'], badge:'EV', contact: { phone:'+919666666666', email:'ev@vroomlot.example' } },
+      { id: 5, title: 'Kia Seltos GTX+', make: 'Kia', model: 'Seltos', year: 2022, fuel: 'Petrol', transmission: 'Automatic', mileage: 12000, price: 1890000, color: 'Red', location: 'Chennai', owner: 'First', image: 'https://images.unsplash.com/photo-1549924231-f129b911e442?q=80&w=1600&auto=format&fit=crop', features: ['ADAS','360 Camera','Bose Audio','HUD'], badge:'New Arrivals', contact: { phone:'+919555555555', email:'kia@vroomlot.example' } },
+      { id: 6, title: 'Mahindra Thar LX 4x4', make: 'Mahindra', model: 'Thar', year: 2024, fuel: 'Diesel', transmission: 'Automatic', mileage: 5000, price: 2100000, color: 'Green', location: 'Delhi', owner: 'First', image: 'https://images.unsplash.com/photo-1606662985856-c593d5922d14?q=80&w=1600&auto=format&fit=crop', features: ['4x4','Removable Top','Touchscreen','TPMS'], badge:'Adventure', contact: { phone:'+919444444444', email:'thar@vroomlot.example' } },
+      { id: 7, title: 'Toyota Innova HyCross', make: 'Toyota', model: 'Innova', year: 2023, fuel: 'Hybrid', transmission: 'e-CVT', mileage: 11000, price: 2800000, color: 'Silver', location: 'Kochi', owner: 'First', image: 'https://images.unsplash.com/photo-1549923899-ec4ee07e6986?q=80&w=1600&auto=format&fit=crop', features: ['Hybrid','ADAS','Captain Seats','7 Airbags'], badge:'Family', contact: { phone:'+919333333333', email:'toyota@vroomlot.example' } }
+    ];
+
+    // --- App Logic ---
+    function carApp(){
+      return {
+        // state
+        raw: [],
+        filtered: [],
+        paged: [],
+        makes: [],
+        favorites: JSON.parse(localStorage.getItem('vroom:favs')||'[]'),
+        compare: JSON.parse(localStorage.getItem('vroom:cmp')||'[]'),
+        page: 1, perPage: 6, totalPages: 1,
+        view: 'grid',
+        sortBy: 'relevance',
+        query: new URLSearchParams(location.search).get('q') || '',
+        canInstall: false, defPrompt: null,
+        filters: { make: '', yearFrom: '', yearTo: '', fuel: '', transmission: '', maxPrice: '' },
+
+        init(){
+          // Load data (could be swapped for fetch('/cars.json'))
+          this.raw = SAMPLE_CARS;
+          this.makes = [...new Set(this.raw.map(c=>c.make))].sort();
+
+          // PWA install handler
+          window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); this.defPrompt = e; this.canInstall = true; });
+          // Theme
+          if(localStorage.getItem('vroom:theme')==='dark'){ document.documentElement.classList.add('dark'); document.body.classList.add('bg-slate-900','text-slate-100'); }
+
+          // Listen to cross-component events
+          window.addEventListener('add-compare', (e)=> this.addToCompare(e.detail));
+
+          this.apply();
+        },
+
+        // helpers
+        formatINR(n){ return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n||0); },
+        scrollTop(){ window.scrollTo({top:0, behavior:'smooth'}); },
+        toggleTheme(){ const root=document.documentElement; root.classList.toggle('dark'); document.body.classList.toggle('bg-slate-900'); document.body.classList.toggle('text-slate-100'); localStorage.setItem('vroom:theme', root.classList.contains('dark')?'dark':'light'); },
+
+        installPWA(){ this.defPrompt && this.defPrompt.prompt && this.defPrompt.prompt(); },
+        toggleFavorite(id){ const i=this.favorites.indexOf(id); i>-1?this.favorites.splice(i,1):this.favorites.push(id); localStorage.setItem('vroom:favs', JSON.stringify(this.favorites)); },
+        addToCompare(id){ if(!this.compare.includes(id)){ if(this.compare.length>=3){ alert('You can compare up to 3 cars.'); return; } this.compare.push(id); localStorage.setItem('vroom:cmp', JSON.stringify(this.compare)); } },
+        openCompare(){ const items=this.compare.map(id=>this.carById(id)); window.dispatchEvent(new CustomEvent('open-compare', { detail: items })); },
+        carById(id){ return this.raw.find(c=>c.id===id); },
+        openDetails(car){ window.dispatchEvent(new CustomEvent('open-details', { detail: car })); },
+        resetFilters(){ this.filters={ make:'', yearFrom:'', yearTo:'', fuel:'', transmission:'', maxPrice:'' }; this.query=''; this.sortBy='relevance'; this.apply(); },
+
+        // core pipeline
+        apply(){
+          let items = [...this.raw];
+
+          // Filter
+          const f=this.filters;
+          items = items.filter(c=> (
+            (!f.make || c.make===f.make) &&
+            (!f.fuel || c.fuel===f.fuel) &&
+            (!f.transmission || c.transmission===f.transmission) &&
+            (!f.yearFrom || c.year>=f.yearFrom) &&
+            (!f.yearTo || c.year<=f.yearTo) &&
+            (!f.maxPrice || c.price<=f.maxPrice)
+          ));
+
+          // Search (fuzzy across title, model, features)
+          if(this.query && this.query.trim().length){
+            const fuse = new Fuse(items, { keys: ['title','model','features'], threshold: 0.4, ignoreLocation: true });
+            items = fuse.search(this.query).map(r=>r.item);
+          }
+
+          // Sort
+          const cmp = {
+            relevance: (a,b)=>0,
+            priceAsc: (a,b)=>a.price-b.price,
+            priceDesc: (a,b)=>b.price-a.price,
+            yearDesc: (a,b)=>b.year-a.year,
+            yearAsc: (a,b)=>a.year-b.year,
+            mileageAsc: (a,b)=>a.mileage-b.mileage,
+          }[this.sortBy];
+          items.sort(cmp);
+
+          // Set + pagination
+          this.filtered = items;
+          this.totalPages = Math.max(1, Math.ceil(items.length / this.perPage));
+          this.page = Math.min(this.page, this.totalPages);
+          const from = (this.page-1)*this.perPage;
+          this.paged = items.slice(from, from+this.perPage);
+
+          // Deep link (HTMX-style URL update)
+          const url = new URL(location);
+          if(this.query) url.searchParams.set('q', this.query); else url.searchParams.delete('q');
+          history.replaceState({}, '', url);
+        },
+
+        // expose format for inline use
+        formatINR(n){ return new Intl.NumberFormat('en-IN', { style:'currency', currency:'INR', maximumFractionDigits:0 }).format(n||0); },
+      }
+    }
+
+    // Re-run pipeline when any reactive prop changes
+    document.addEventListener('alpine:init', ()=>{
+      Alpine.effect(()=>{ const s=Alpine.store('app'); });
+    });
+  </script>
+
+  <!-- Wire up watchers -->
+  <script>
+    document.addEventListener('alpine:init', ()=>{
+      Alpine.data('carApp', carApp);
+    });
+  </script>
+
+  <!-- Reactive watchers to recompute on change -->
+  <script>
+    // Minimal watcher to trigger apply() when key state changes
+    document.addEventListener('alpine:init', () => {
+      Alpine.magic('watchFilters', (el, { Alpine }) => (ctx) => {
+        // no-op; using $watch below
+      });
+    });
+  </script>
+
+  <script>
+    // Attach watchers after Alpine mounts
+    window.addEventListener('alpine:initialized', () => {
+      const root = document.querySelector('[x-data]');
+      const comp = Alpine.$data(root);
+      // Watch many props
+      ['query','sortBy','view','filters.make','filters.yearFrom','filters.yearTo','filters.fuel','filters.transmission','filters.maxPrice','page','perPage']
+        .forEach(path=>Alpine.watch(()=>path.split('.').reduce((o,k)=>o?.[k], comp), ()=>comp.apply()));
+    });
+  </script>
+
+  <!-- Service Worker (inlined registration; actual SW script created via Blob) -->
+  <script>
+    if('serviceWorker' in navigator){
+      const swCode = `
+        const CACHE='vroom-cache-v1';
+        const ASSETS=[
+          '/',
+        ];
+        self.addEventListener('install',e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))); self.skipWaiting(); });
+        self.addEventListener('activate',e=>{ e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))); self.clients.claim(); });
+        self.addEventListener('fetch',e=>{ const req=e.request; e.respondWith(caches.match(req).then(res=> res || fetch(req).then(resp=>{ const copy=resp.clone(); caches.open(CACHE).then(c=>c.put(req, copy)).catch(()=>{}); return resp; }).catch(()=>caches.match('/')))); });
+      `;
+      const blob = new Blob([swCode], { type: 'text/javascript' });
+      const url = URL.createObjectURL(blob);
+      navigator.serviceWorker.register(url);
+    }
+  </script>
+
+  <!-- Tiny analytics (optional) -->
+  <script>
+    (function(){
+      const key='vroom:analytics';
+      const data=JSON.parse(localStorage.getItem(key)||'{}');
+      data.visits=(data.visits||0)+1; data.last=new Date().toISOString();
+      localStorage.setItem(key, JSON.stringify(data));
+      console.debug('[analytics]', data);
+    })();
+  </script>
+</body>
+</html>

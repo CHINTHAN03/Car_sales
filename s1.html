@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Vibrant Site</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@tailwindcss/forms"></script>
+</head>
+<body class="bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-600 text-white font-sans min-h-screen flex flex-col">
+
+  <!-- Navbar -->
+  <nav class="flex justify-between items-center p-6 bg-black/30 backdrop-blur-md sticky top-0 z-50">
+    <h1 class="text-2xl font-bold tracking-wide">⚡ MyVibe</h1>
+    <ul class="flex gap-6">
+      <li><a href="#home" class="hover:text-yellow-300 transition">Home</a></li>
+      <li><a href="#about" class="hover:text-yellow-300 transition">About</a></li>
+      <li><a href="#contact" class="hover:text-yellow-300 transition">Contact</a></li>
+    </ul>
+  </nav>
+
+  <!-- Hero Section -->
+  <section id="home" class="flex flex-col items-center justify-center flex-grow text-center px-6 py-20">
+    <h2 class="text-5xl font-extrabold drop-shadow-lg">Welcome to My Vibrant World 🌍</h2>
+    <p class="mt-4 text-lg max-w-2xl">This is a colorful, vibrant static website powered by Azure. Perfect for showcasing projects, personal portfolios, or just sharing your vibe online.</p>
+    <a href="#about" class="mt-6 inline-block px-6 py-3 bg-yellow-400 text-black font-semibold rounded-2xl shadow-lg hover:scale-105 transition">Explore More</a>
+  </section>
+
+  <!-- About Section -->
+  <section id="about" class="bg-white text-black px-8 py-20 rounded-t-3xl shadow-inner">
+    <h3 class="text-3xl font-bold text-center mb-10">About This Website</h3>
+    <div class="grid md:grid-cols-2 gap-10 max-w-5xl mx-auto">
+      <div class="space-y-4">
+        <p>This website is built with <span class="font-semibold text-purple-600">HTML</span>, <span class="font-semibold text-indigo-600">TailwindCSS</span>, and <span class="font-semibold text-pink-600">JavaScript</span>. It’s fully responsive, modern, and can be deployed seamlessly on <span class="font-bold">Azure Static Web Apps</span>.</p>
+        <p>Feel free to modify the design and content as per your creativity. Add animations, sections, or even hook it to Azure Functions for backend magic!</p>
+      </div>
+      <div>
+        <img src="https://source.unsplash.com/600x400/?technology,colorful" alt="vibrant design" class="rounded-2xl shadow-lg">
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact Section -->
+  <section id="contact" class="px-8 py-20 text-center bg-black/40 backdrop-blur-md">
+    <h3 class="text-3xl font-bold mb-6">Get in Touch ✨</h3>
+    <form class="max-w-xl mx-auto bg-white/10 p-6 rounded-2xl space-y-4">
+      <input type="text" placeholder="Your Name" class="w-full px-4 py-2 rounded-lg text-black" required>
+      <input type="email" placeholder="Your Email" class="w-full px-4 py-2 rounded-lg text-black" required>
+      <textarea placeholder="Your Message" rows="4" class="w-full px-4 py-2 rounded-lg text-black" required></textarea>
+      <button type="submit" class="px-6 py-3 bg-yellow-400 text-black font-semibold rounded-xl shadow hover:scale-105 transition">Send Message</button>
+    </form>
+  </section>
+
+  <!-- Footer -->
+  <footer class="p-6 bg-black/40 text-center">
+    <p>&copy; 2025 MyVibe. Made with ❤️ and Azure ⚡</p>
+  </footer>
+
+</body>
+</html>
